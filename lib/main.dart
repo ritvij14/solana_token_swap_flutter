@@ -41,22 +41,25 @@ class _MyHomePageState extends State<MyHomePage> {
   final SharedPrefs prefs = SharedPrefs();
   final rpcClient = RpcClient('https://api.devnet.solana.com');
   final subscriptionClient = SubscriptionClient.connect(
-      Platform.environment['DEVNET_WEBSOCKET_URL'] ?? 'ws://127.0.0.1:8900');
+      Platform.environment['DEVNET_WEBSOCKET_URL'] ??
+          'ws://api.devnet.solana.com');
   double walletBalance = 0.0;
   List<ProgramAccount> tokens = [];
-  late final Ed25519HDKeyPair mint;
-  late final Ed25519HDKeyPair freezeAuthority;
-  late final Ed25519HDKeyPair mintAuthority;
+  late Ed25519HDKeyPair mint;
+  late Ed25519HDKeyPair freezeAuthority;
+  late Ed25519HDKeyPair mintAuthority;
+  late Ed25519HDKeyPair wallet;
 
   void _createWallet() async {
     String randomMnemonic = bip39.generateMnemonic();
     final wallet = await Ed25519HDKeyPair.fromMnemonic(randomMnemonic);
     final address = wallet.address;
     // final privateKey = wallet.
-    prefs.setWallet(wallet);
+    prefs.setAddress(address);
     prefs.setMnemonic(randomMnemonic);
     setState(() {
       walletAddress = address;
+      this.wallet = wallet;
     });
   }
 
@@ -72,20 +75,25 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _checkWallet() async {
-    var wallet = prefs.getWallet();
-    if (wallet != null) {
+    var address = prefs.getAddress();
+    if (address != null) {
       setState(() {
-        walletAddress = wallet.address;
+        walletAddress = address;
       });
     } else {
       _createWallet();
     }
-  }
-
-  void _createToken() async {
     mint = await Ed25519HDKeyPair.random();
     freezeAuthority = await Ed25519HDKeyPair.random();
     mintAuthority = await Ed25519HDKeyPair.random();
+    print("WalletAddress:" + walletAddress);
+    print("Mint:" + mint.address);
+    print("FreezeAuthority:" + freezeAuthority.address);
+    print("MintAuthority:" + mintAuthority.address);
+  }
+
+  void _createToken() async {
+    // await rpcClient.requestAirdrop(mintAuthority.address, lamportsPerSol);
 
     // initialize mint
     final rent = await rpcClient
@@ -102,18 +110,11 @@ class _MyHomePageState extends State<MyHomePage> {
       [mintAuthority, mint],
     );
 
-    // create account
-    await sendMessage(
-      TokenProgram.createAccount(
-        mint: mint.address,
-        address: walletAddress,
-        owner: mintAuthority.address,
-        rent: rent,
-        space: TokenProgram.neededAccountSpace,
-      ),
-      [mintAuthority, prefs.getWallet()!],
-    );
+    // display result
+    print("token minting done");
+  }
 
+  void _mintTo() async {
     // mint tokens to user's account
     await sendMessage(
       TokenProgram.mintTo(
@@ -124,9 +125,22 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       [mintAuthority],
     );
+  }
 
-    // display result
-    print("token minting done");
+  void _createMintAccount() async {
+    final rent = await rpcClient
+        .getMinimumBalanceForRentExemption(TokenProgram.neededMintAccountSpace);
+// create account
+    await sendMessage(
+      TokenProgram.createAccount(
+        mint: mint.address,
+        address: walletAddress,
+        owner: mintAuthority.address,
+        rent: rent,
+        space: TokenProgram.neededAccountSpace,
+      ),
+      [mintAuthority, wallet],
+    );
   }
 
   void _getTokens() async {
@@ -217,11 +231,19 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: const Text('Create Token'),
                   ),
                   ElevatedButton(
-                    onPressed: _getTokens,
-                    child: const Text('Show Tokens'),
+                    onPressed: _createMintAccount,
+                    child: const Text('Create Acc'),
+                  ),
+                  ElevatedButton(
+                    onPressed: _mintTo,
+                    child: const Text('Mint the Token'),
                   ),
                 ],
               ),
+            ),
+            ElevatedButton(
+              onPressed: _getTokens,
+              child: const Text('Show Tokens'),
             ),
             ...tokens.map((token) {
               return Row(

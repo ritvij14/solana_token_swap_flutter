@@ -10,18 +10,8 @@ class SharedPrefs {
     sharedPrefs = await SharedPreferences.getInstance();
   }
 
-  void setWallet(Ed25519HDKeyPair wallet) async {
-    sharedPrefs.setString(
-        'wallet', const JsonEncoder().convert(await wallet.extract()));
-  }
-
-  Ed25519HDKeyPair? getWallet() {
-    String? wallet = sharedPrefs.getString('wallet');
-    if (wallet == null) {
-      return null;
-    } else {
-      return const JsonDecoder().convert(wallet);
-    }
+  String? getAddress() {
+    return sharedPrefs.getString('wallet_address');
   }
 
   void setAddress(String address) {
