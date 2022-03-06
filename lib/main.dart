@@ -50,6 +50,10 @@ class _MyHomePageState extends State<MyHomePage> {
   late Ed25519HDKeyPair mintAuthority;
   late Ed25519HDKeyPair wallet;
 
+  final client = SolanaClient(
+      rpcUrl: Uri.parse("https://api.devnet.solana.com"),
+      websocketUrl: Uri.parse("wss://api.devnet.solana.com"));
+
   void _createWallet() async {
     String randomMnemonic = bip39.generateMnemonic();
     final wallet = await Ed25519HDKeyPair.fromMnemonic(randomMnemonic);
@@ -86,66 +90,43 @@ class _MyHomePageState extends State<MyHomePage> {
     mint = await Ed25519HDKeyPair.random();
     freezeAuthority = await Ed25519HDKeyPair.random();
     mintAuthority = await Ed25519HDKeyPair.random();
-    print("WalletAddress:" + walletAddress);
-    print("Mint:" + mint.address);
-    print("FreezeAuthority:" + freezeAuthority.address);
-    print("MintAuthority:" + mintAuthority.address);
+    print("WalletAddress: " + walletAddress);
+    print("Mint: " + mint.address);
+    print("FreezeAuthority: " + freezeAuthority.address);
+    print("MintAuthority: " + mintAuthority.address);
   }
 
   void _createToken() async {
-    // await rpcClient.requestAirdrop(mintAuthority.address, lamportsPerSol);
-
     // initialize mint
     final rent = await rpcClient
         .getMinimumBalanceForRentExemption(TokenProgram.neededMintAccountSpace);
-    await sendMessage(
-      TokenProgram.initializeMint(
-        mint: mint.address,
-        mintAuthority: mintAuthority.address,
-        freezeAuthority: freezeAuthority.address,
-        rent: rent,
-        space: TokenProgram.neededMintAccountSpace,
-        decimals: 5,
-      ),
-      [mintAuthority, mint],
+
+    final mint = await client.initializeMint(
+      owner: wallet,
+      decimals: 9,
     );
 
-    // display result
+    final newAccount = await client.createAssociatedTokenAccount(
+      funder: wallet,
+      mint: mint.mint,
+    );
+
+    await client.transferMint(
+      destination: newAccount.pubkey,
+      amount: 100,
+      mint: mint.mint,
+      owner: wallet,
+    );
+
     print("token minting done");
   }
 
-  void _mintTo() async {
-    // mint tokens to user's account
-    await sendMessage(
-      TokenProgram.mintTo(
-        mint: mint.address,
-        destination: walletAddress,
-        authority: mintAuthority.address,
-        amount: 10,
-      ),
-      [mintAuthority],
-    );
-  }
-
-  void _createMintAccount() async {
-    final rent = await rpcClient
-        .getMinimumBalanceForRentExemption(TokenProgram.neededMintAccountSpace);
-// create account
-    await sendMessage(
-      TokenProgram.createAccount(
-        mint: mint.address,
-        address: walletAddress,
-        owner: mintAuthority.address,
-        rent: rent,
-        space: TokenProgram.neededAccountSpace,
-      ),
-      [mintAuthority, wallet],
-    );
-  }
-
   void _getTokens() async {
-    final tokenInfo = await rpcClient.getTokenAccountsByOwner(walletAddress,
-        const TokenAccountsFilter.byProgramId(TokenProgram.programId));
+    final tokenInfo = await client.rpcClient.getTokenAccountsByOwner(
+      walletAddress,
+      const TokenAccountsFilter.byProgramId(TokenProgram.programId),
+      encoding: Encoding.jsonParsed,
+    );
 
     if (tokenInfo.isNotEmpty) {
       setState(() {
@@ -231,19 +212,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: const Text('Create Token'),
                   ),
                   ElevatedButton(
-                    onPressed: _createMintAccount,
-                    child: const Text('Create Acc'),
-                  ),
-                  ElevatedButton(
-                    onPressed: _mintTo,
-                    child: const Text('Mint the Token'),
+                    onPressed: _getTokens,
+                    child: const Text('Show Tokens'),
                   ),
                 ],
               ),
-            ),
-            ElevatedButton(
-              onPressed: _getTokens,
-              child: const Text('Show Tokens'),
             ),
             ...tokens.map((token) {
               return Row(
@@ -251,8 +224,9 @@ class _MyHomePageState extends State<MyHomePage> {
                   Text(
                     '${token.pubkey.substring(0, 5)}...${token.pubkey.substring(token.pubkey.length - 5)}',
                   ),
+                  const Spacer(),
                   Text(
-                    '${token.account.lamports}',
+                    '${token.account.lamports / pow(10, 9)}',
                   ),
                 ],
               );
