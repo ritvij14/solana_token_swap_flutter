@@ -7,6 +7,7 @@ import 'package:solana/encoder.dart';
 import 'package:solana/solana.dart';
 import 'package:solana_token_swap_flutter/shared_prefs.dart';
 import 'package:bip39/bip39.dart' as bip39;
+import 'package:solana_token_swap_flutter/token_swap_implementation.dart';
 
 void main() {
   runApp(const MyApp());
@@ -49,6 +50,9 @@ class _MyHomePageState extends State<MyHomePage> {
   late Ed25519HDKeyPair freezeAuthority;
   late Ed25519HDKeyPair mintAuthority;
   late Ed25519HDKeyPair wallet;
+  late SplToken tokenA;
+  late String tokenAacc;
+  late List swapData;
 
   final client = SolanaClient(
       rpcUrl: Uri.parse("https://api.devnet.solana.com"),
@@ -56,14 +60,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _createWallet() async {
     String randomMnemonic = bip39.generateMnemonic();
-    final wallet = await Ed25519HDKeyPair.fromMnemonic(randomMnemonic);
+    wallet = await Ed25519HDKeyPair.fromMnemonic(randomMnemonic);
     final address = wallet.address;
     // final privateKey = wallet.
     prefs.setAddress(address);
     prefs.setMnemonic(randomMnemonic);
     setState(() {
       walletAddress = address;
-      this.wallet = wallet;
+      // this.wallet = wallet;
     });
   }
 
@@ -90,7 +94,7 @@ class _MyHomePageState extends State<MyHomePage> {
     mint = await Ed25519HDKeyPair.random();
     freezeAuthority = await Ed25519HDKeyPair.random();
     mintAuthority = await Ed25519HDKeyPair.random();
-    print("WalletAddress: " + walletAddress);
+    print("WalletAddress: " + wallet.address);
     print("Mint: " + mint.address);
     print("FreezeAuthority: " + freezeAuthority.address);
     print("MintAuthority: " + mintAuthority.address);
@@ -113,10 +117,15 @@ class _MyHomePageState extends State<MyHomePage> {
 
     await client.transferMint(
       destination: newAccount.pubkey,
-      amount: 100,
+      amount: 100000,
       mint: mint.mint,
       owner: wallet,
     );
+
+    setState(() {
+      tokenA = mint;
+      tokenAacc = newAccount.pubkey;
+    });
 
     print("token minting done");
   }
@@ -163,6 +172,22 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     prefs.initPrefs();
+  }
+
+  void _createTokenSwap() async {
+    swapData = await createSwap(wallet, tokenA.mint);
+  }
+
+  void _depositInSwap() async {
+    await depositTokens(
+      swapData[1],
+      swapData[2],
+      wallet,
+      tokenAacc,
+      swapData[3],
+      swapData[4],
+      swapData[5],
+    );
   }
 
   @override
@@ -218,15 +243,31 @@ class _MyHomePageState extends State<MyHomePage> {
                 ],
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.all(15.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: <Widget>[
+                  ElevatedButton(
+                    onPressed: _createTokenSwap,
+                    child: const Text('Create Swap'),
+                  ),
+                  ElevatedButton(
+                    onPressed: _depositInSwap,
+                    child: const Text('Deposit Tokens'),
+                  ),
+                ],
+              ),
+            ),
             ...tokens.map((token) {
               return Row(
                 children: [
                   Text(
-                    '${token.pubkey.substring(0, 5)}...${token.pubkey.substring(token.pubkey.length - 5)}',
+                    'Token: ${token.pubkey.substring(0, 5)}...${token.pubkey.substring(token.pubkey.length - 5)}',
                   ),
                   const Spacer(),
                   Text(
-                    '${token.account.lamports / pow(10, 9)}',
+                    'Amount: ${token.account.lamports / pow(10, 9)}',
                   ),
                 ],
               );
