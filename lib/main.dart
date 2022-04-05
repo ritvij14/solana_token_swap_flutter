@@ -110,6 +110,8 @@ class _MyHomePageState extends State<MyHomePage> {
       decimals: 9,
     );
 
+    print("created mint, now transfering");
+
     final newAccount = await client.createAssociatedTokenAccount(
       funder: wallet,
       mint: mint.mint,
@@ -117,7 +119,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     await client.transferMint(
       destination: newAccount.pubkey,
-      amount: 100000,
+      amount: 1000000000,
       mint: mint.mint,
       owner: wallet,
     );
@@ -175,7 +177,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _createTokenSwap() async {
-    swapData = await createSwap(wallet, tokenA.mint);
+    await createSwap(wallet, tokenA.mint);
   }
 
   void _depositInSwap() async {
